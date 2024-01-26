@@ -84,7 +84,7 @@ The following build dependencies are required:
 
 *   [BinExport](https://github.com/google/binexport) 12, the companion plugin
     to BinDiff that also contains a lot of shared code
-*   Boost 1.83.0 or higher (a partial copy of 1.83.0 ships with BinExport and
+*   Boost 1.83.0 or higher (a partial copy of ships with BinExport and
     will be used automatically)
 *   [CMake](https://cmake.org/download/) 3.14 or higher
 *   [Ninja](https://ninja-build.org/) for speedy builds
@@ -92,7 +92,7 @@ The following build dependencies are required:
     Visual Studio 2019 compiler and the Windows SDK for Windows 10.
 *   Git 1.8 or higher
 *   Dependencies that will be downloaded:
-    *   Abseil, GoogleTest, Protocol Buffers (3.14), and SQLite3
+    *   Abseil, GoogleTest, Protocol Buffers, and SQLite3
     *   Binary Ninja SDK
 
 The following build dependencies are optional:
