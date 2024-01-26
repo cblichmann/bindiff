@@ -73,6 +73,6 @@ jobs:
       with:
         name: BinDiff-${{ runner.os }}
         path: |
-          ${{ runner.workspace }}/build/bindiff
+          ${{ runner.workspace }}/build/bindiff*
           ${{ runner.workspace }}/build/ida/bindiff*
           ${{ runner.workspace }}/build/tools/bindiff*
