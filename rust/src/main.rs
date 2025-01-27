@@ -1,13 +1,30 @@
+// Copyright 2025 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use std::env;
 use std::path::PathBuf;
-use std::process::ExitCode;
 
+use anyhow::anyhow;
+use anyhow::Result;
+use bindiff::graphs::binexport2::BinExport2;
 use clap::Parser;
 use clap::ValueEnum;
 
-mod config;
-
-const BINDIFF_COPYRIGHT: &str = "(c)2004-2011 zynamics GmbH, (c)2011-2024 Google LLC.";
+use bindiff::config;
+use bindiff::version::BINDIFF_COPYRIGHT;
+use bindiff::graphs::Binary;
+use protobuf::Message;
 
 fn bindiff_release() -> u32 {
     // We only use the major version
@@ -112,14 +129,12 @@ struct Cli {
     //   name); default: ;
 }
 
-fn main() -> ExitCode {
-    let mut cli = Cli::parse();
+fn main() -> Result<()> {
+    let cli = Cli::parse();
 
-    if cli.output_dir.is_none() {
-        cli.output_dir = Some(std::env::current_dir().unwrap_or(".".into()));
-    }
-    println!("{}", cli.output_dir.unwrap().display());
-    println!("{}", config::CONFIG_NAME);
+    let output_dir = cli
+        .output_dir
+        .unwrap_or(std::env::current_dir().unwrap_or(".".into()));
 
     if cli.logo && !cli.nologo {
         println!(
@@ -131,23 +146,42 @@ fn main() -> ExitCode {
 
     let mut config = config::proto();
     if let Some(config_file) = cli.config {
-        let loaded = config::load_from_file(config_file);
-        // config::merge_into(loaded, config);
+        let loaded_config = config::load_from_file(config_file).unwrap();
+        config::merge_into(&loaded_config, &mut config)?;
     }
 
     // Print configuration to stdout if requested
     if cli.print_config {
-        eprintln!("not implemented!");
-        return ExitCode::FAILURE;
+        let json_config = config::as_json_string(&config)?;
+        println!("{}", json_config);
+        return Ok(());
     }
 
     // Launch Java UI if requested
-    if cli.ui {
-        eprintln!("not implemented!");
-        return ExitCode::FAILURE;
+    if std::env::args().nth(0) == Some("bindiff_ui".to_string()) || cli.ui {
+        return Err(anyhow!("not implemented"));
     }
 
-    ExitCode::SUCCESS
+    let primary = cli
+        .primary
+        .or(cli.primary_pos)
+        .ok_or(anyhow!("Need primary input"))?;
+
+    if !output_dir.is_dir() {
+        return Err(anyhow!(
+            "Output parameter (--output-dir) must be a writable directory: {}",
+            output_dir.display()
+        ));
+    }
+
+    if primary.is_file() {
+        let mut reader = std::fs::OpenOptions::new().read(true).open(&primary)?;
+        let proto = BinExport2::parse_from_reader(&mut reader)?;
+        let binary = Binary::from_proto(&proto, &primary);
+        eprintln!("OK");
+    }
+
+    Ok(())
 }
 
 #[test]

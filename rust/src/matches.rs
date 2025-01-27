@@ -12,22 +12,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::io::Result;
-
-use git_version::git_version;
-
-fn main() -> Result<()> {
-    println!(
-        "cargo::rustc-env=BUILD_DATE={}",
-        chrono::Utc::now().format("%b %e %Y")
-    );
-    println!("cargo::rustc-env=GIT_REV={}", git_version!());
-
-    protobuf_codegen::Codegen::new()
-        .pure()
-        .include("src")
-        .inputs(["src/bindiff_config.proto", "src/binexport2.proto"])
-        .cargo_out_dir("bindiff")
-        .run_from_script();
-    Ok(())
-}
+pub fn get_default_matching_steps_call_graph() {}

@@ -1,36 +1,19 @@
-extern crate proc_macro;
-extern crate proc_macro2;
-extern crate quote;
-extern crate syn;
+// Copyright 2025 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-use proc_macro::TokenStream;
-use quote::quote;
-use syn::parse_macro_input;
-use syn::DeriveInput;
-
-#[proc_macro_derive(FromStrImpl)]
-pub fn from_str_impl_fn(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-
-    // let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let name = &input.ident;
-
-    let expanded = quote! {
-        impl #name {
-            pub fn from_str<'de, D>(deserializer: D) -> Result<i32, D::Error>
-            where
-                D: serde::Deserializer<'de>,
-            {
-                let s: &str = serde::Deserialize::deserialize(deserializer)?;
-                Self::from_str_name(s)
-                    .map(|v| v as i32)
-                    .ok_or(serde::de::Error::invalid_value(
-                        serde::de::Unexpected::Option,
-                        &"a valid enum value",
-                    ))
-            }
-        }
-    };
-
-    TokenStream::from(expanded)
-}
+pub mod config;
+pub mod graphs;
+pub mod matches;
+pub mod util;
+pub mod version;

@@ -12,22 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::io::Result;
-
-use git_version::git_version;
-
-fn main() -> Result<()> {
-    println!(
-        "cargo::rustc-env=BUILD_DATE={}",
-        chrono::Utc::now().format("%b %e %Y")
-    );
-    println!("cargo::rustc-env=GIT_REV={}", git_version!());
-
-    protobuf_codegen::Codegen::new()
-        .pure()
-        .include("src")
-        .inputs(["src/bindiff_config.proto", "src/binexport2.proto"])
-        .cargo_out_dir("bindiff")
-        .run_from_script();
-    Ok(())
-}
+pub const BINDIFF_NAME: &str = "BinDiff";
+pub const BINDIFF_COPYRIGHT: &str = "(c)2004-2011 zynamics GmbH, (c)2011-2025 Google LLC.";
+pub const CONFIG_NAME: &str = "bindiff.json";

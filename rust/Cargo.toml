@@ -5,23 +5,19 @@ description = "Find similarities and differences in disassembled code"
 edition = "2021"
 license = "Apache2"
 
-[lib]
-proc-macro = true
-
 [dependencies]
 anyhow = "1.0.89"
+app_dirs2 = "2.5.5"
 clap = { version = "4.5.19", features = ["cargo", "derive"] }
 lazy_static = "1.5.0"
 petgraph = "0.6.5"
-proc-macro2 = "1.0.86"
-prost = "0.13.3"
-quote = "1.0.37"
+protobuf = "3.7.1"
+protobuf-json-mapping = "3.7.1"
 serde = { version = "1.0.210", features = ["derive"] }
-serde_json = "1.0.128"
+serde_json = { version = "1.0.128", features = ["preserve_order"] }
 sqlite = "0.36.1"
-syn = "2.0.79"
 
 [build-dependencies]
 chrono = { version = "0.4.38", default-features = false, features = ["now"] }
 git-version = "0.3.9"
-prost-build = "0.13.3"
+protobuf-codegen = "3.7.1"
