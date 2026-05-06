@@ -252,7 +252,11 @@ impl DatabaseWriter {
             "function: MD index matching (callGraph MD index, bottom up)",
             "function: instruction count",
             "function: loop count matching",
+            "function: call sequence matching(exact)",
+            "function: call sequence matching(topology)",
+            "function: call sequence matching(sequence)",
             "function: address sequence",
+            "function: manual",
         ];
         for (i, step) in func_steps.iter().enumerate() {
             let id = (i + 1) as i16;

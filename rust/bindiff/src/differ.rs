@@ -409,6 +409,94 @@ pub fn match_by_address_sequence(context: &mut MatchingContext) {
     }
 }
 
+pub fn match_by_call_sequence(context: &mut MatchingContext, accuracy: u8) {
+    let step_name = match accuracy {
+        0 => "function: call sequence matching(exact)",
+        1 => "function: call sequence matching(topology)",
+        _ => "function: call sequence matching(sequence)",
+    };
+
+    let current_matches: Vec<_> = context.fixed_points.iter()
+        .map(|fp| (fp.primary_address, fp.secondary_address))
+        .collect();
+
+    for (prim_parent_addr, sec_parent_addr) in current_matches {
+        let prim_parent = context.primary_flow_graphs.iter().find(|fg| fg.entry_point_address == prim_parent_addr).unwrap();
+        let sec_parent = context.secondary_flow_graphs.iter().find(|fg| fg.entry_point_address == sec_parent_addr).unwrap();
+
+        let unmatched_children1: Vec<_> = prim_parent.call_targets.iter()
+            .filter(|&&addr| !context.fixed_points_by_primary.contains_key(&addr))
+            .cloned()
+            .collect();
+        let unmatched_children2: Vec<_> = sec_parent.call_targets.iter()
+            .filter(|&&addr| !context.fixed_points_by_secondary.contains_key(&addr))
+            .cloned()
+            .collect();
+
+        if unmatched_children1.is_empty() || unmatched_children2.is_empty() {
+            continue;
+        }
+
+        let mut map1 = HashMap::new();
+        for addr in unmatched_children1 {
+            let lvl = prim_parent.get_level_for_call_address(addr);
+            let index = match accuracy {
+                0 => ((lvl.0 as u32) << 16) + lvl.1 as u32,
+                1 => lvl.0 as u32,
+                _ => 0,
+            };
+            map1.entry(index).or_insert_with(Vec::new).push(addr);
+        }
+
+        let mut map2 = HashMap::new();
+        for addr in unmatched_children2 {
+            let lvl = sec_parent.get_level_for_call_address(addr);
+            let index = match accuracy {
+                0 => ((lvl.0 as u32) << 16) + lvl.1 as u32,
+                1 => lvl.0 as u32,
+                _ => 0,
+            };
+            map2.entry(index).or_insert_with(Vec::new).push(addr);
+        }
+
+        if accuracy == 2 {
+            let mut sorted_children1: Vec<_> = prim_parent.call_targets.iter()
+                .filter(|&&addr| !context.fixed_points_by_primary.contains_key(&addr))
+                .cloned()
+                .collect();
+            sorted_children1.sort_by_key(|&addr| {
+                let lvl = prim_parent.get_level_for_call_address(addr);
+                ((lvl.0 as u32) << 16) + lvl.1 as u32
+            });
+
+            let mut sorted_children2: Vec<_> = sec_parent.call_targets.iter()
+                .filter(|&&addr| !context.fixed_points_by_secondary.contains_key(&addr))
+                .cloned()
+                .collect();
+            sorted_children2.sort_by_key(|&addr| {
+                let lvl = sec_parent.get_level_for_call_address(addr);
+                ((lvl.0 as u32) << 16) + lvl.1 as u32
+            });
+
+            if sorted_children1.len() == sorted_children2.len() {
+                for i in 0..sorted_children1.len() {
+                    context.add_fixed_point(sorted_children1[i], sorted_children2[i], step_name);
+                }
+            }
+        } else {
+            for (index, addrs1) in &map1 {
+                if addrs1.len() == 1 {
+                    if let Some(addrs2) = map2.get(index) {
+                        if addrs2.len() == 1 {
+                            context.add_fixed_point(addrs1[0], addrs2[0], step_name);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub fn diff(context: &mut MatchingContext) {
     match_by_name(context);
     match_by_hash(context);
@@ -419,5 +507,8 @@ pub fn diff(context: &mut MatchingContext) {
     match_by_call_graph_md_index(context, true);  // Bottom up
     match_by_instruction_count(context);
     match_by_loop_count(context);
+    match_by_call_sequence(context, 0); // Exact call sequence
+    match_by_call_sequence(context, 1); // Topology call sequence
+    match_by_call_sequence(context, 2); // Sequence call sequence
     match_by_address_sequence(context);
 }

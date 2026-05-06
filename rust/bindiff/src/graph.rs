@@ -354,6 +354,7 @@ pub struct FlowGraph {
     pub instructions: Vec<Instruction>,
     pub call_targets: Vec<Address>,
     pub call_graph_vertex: Option<NodeIndex<u32>>,
+    pub level_for_call: Vec<(Address, (u16, u16))>,
 }
 
 impl Default for FlowGraph {
@@ -370,6 +371,7 @@ impl Default for FlowGraph {
             instructions: Vec::new(),
             call_targets: Vec::new(),
             call_graph_vertex: None,
+            level_for_call: Vec::new(),
         }
     }
 }
@@ -398,30 +400,34 @@ fn proto_to_flow_graph_edge_type(edge_type: i32) -> u8 {
 impl FlowGraph {
     pub fn get_call_targets(&self, vertex: NodeIndex<u32>) -> &[Address] {
         let start = self.graph[vertex].call_target_start as usize;
-        if start == u32::MAX as usize {
-            return &[];
-        }
+        let call_len = self.call_targets.len();
         let end = if vertex.index() + 1 < self.graph.node_count() {
             let next_start = self.graph[NodeIndex::new(vertex.index() + 1)].call_target_start as usize;
             if next_start == u32::MAX as usize {
-                self.call_targets.len()
+                call_len
             } else {
                 next_start
             }
         } else {
-            self.call_targets.len()
+            call_len
         };
-        &self.call_targets[start..end]
+        &self.call_targets[start..std::cmp::max(start, end)]
     }
 
     pub fn get_instructions(&self, vertex: NodeIndex<u32>) -> &[Instruction] {
         let start = self.graph[vertex].instruction_start as usize;
+        let inst_len = self.instructions.len();
         let end = if vertex.index() + 1 < self.graph.node_count() {
-            self.graph[NodeIndex::new(vertex.index() + 1)].instruction_start as usize
+            let next_start = self.graph[NodeIndex::new(vertex.index() + 1)].instruction_start as usize;
+            if next_start == u32::MAX as usize {
+                inst_len
+            } else {
+                next_start
+            }
         } else {
-            self.instructions.len()
+            inst_len
         };
-        &self.instructions[start..end]
+        &self.instructions[start..std::cmp::max(start, end)]
     }
 
     pub fn get_vertex(&self, address: Address) -> Option<NodeIndex<u32>> {
@@ -449,6 +455,50 @@ impl FlowGraph {
 
     pub fn get_address(&self, vertex: NodeIndex<u32>) -> Address {
         self.get_instructions(vertex)[0].address
+    }
+
+    pub fn calculate_call_levels(&mut self) {
+        self.level_for_call.clear();
+        let node_indices: Vec<_> = self.graph.node_indices().collect();
+        for node_idx in node_indices {
+            let calls = self.get_call_targets(node_idx).to_vec();
+            if calls.is_empty() {
+                continue;
+            }
+
+            let level = self.graph[node_idx].bfs_top_down;
+            for (sequence, &target) in calls.iter().enumerate() {
+                self.level_for_call.push((target, (level, sequence as u16)));
+            }
+        }
+        self.level_for_call.shrink_to_fit();
+        self.level_for_call.sort_by_key(|x| x.0);
+    }
+
+    pub fn get_level_for_call_address(&self, address: Address) -> (u16, u16) {
+        let mut min_level = (u16::MAX, u16::MAX);
+        let idx = match self.level_for_call.binary_search_by_key(&address, |x| x.0) {
+            Ok(i) => {
+                let mut first = i;
+                while first > 0 && self.level_for_call[first - 1].0 == address {
+                    first -= 1;
+                }
+                first
+            }
+            Err(_) => return min_level,
+        };
+
+        for i in idx..self.level_for_call.len() {
+            let entry = &self.level_for_call[i];
+            if entry.0 != address {
+                break;
+            }
+            let lvl = entry.1;
+            if lvl.0 < min_level.0 || (lvl.0 == min_level.0 && lvl.1 < min_level.1) {
+                min_level = lvl;
+            }
+        }
+        min_level
     }
 
     pub fn read(
@@ -603,7 +653,7 @@ impl FlowGraph {
         self.calculate_topology();
         self.md_index = self.calculate_md_index(false);
         self.md_index_inverted = self.calculate_md_index(true);
-        // self.calculate_call_levels(); // Skip for now if not strictly needed for basic diff
+        self.calculate_call_levels();
         self.mark_loops();
     }
 
