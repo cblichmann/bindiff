@@ -134,7 +134,155 @@ pub fn match_by_hash(context: &mut MatchingContext) {
     }
 }
 
+pub fn match_by_prime(context: &mut MatchingContext) {
+    let mut secondary_counts = HashMap::new();
+    let mut secondary_by_prime = HashMap::new();
+    for fg in context.secondary_flow_graphs {
+        if context.fixed_points_by_secondary.contains_key(&fg.entry_point_address) {
+            continue;
+        }
+        let prime = fg.prime;
+        if prime == 0 {
+            continue;
+        }
+        *secondary_counts.entry(prime).or_insert(0) += 1;
+        secondary_by_prime.insert(prime, fg.entry_point_address);
+    }
+
+    let mut primary_counts = HashMap::new();
+    let mut primary_by_prime = HashMap::new();
+    for fg in context.primary_flow_graphs {
+        if context.fixed_points_by_primary.contains_key(&fg.entry_point_address) {
+            continue;
+        }
+        let prime = fg.prime;
+        if prime == 0 {
+            continue;
+        }
+        *primary_counts.entry(prime).or_insert(0) += 1;
+        primary_by_prime.insert(prime, fg.entry_point_address);
+    }
+
+    for (prime, &prim_addr) in &primary_by_prime {
+        if primary_counts[prime] == 1 {
+            if let Some(&sec_counts) = secondary_counts.get(prime) {
+                if sec_counts == 1 {
+                    let sec_addr = secondary_by_prime[prime];
+                    context.add_fixed_point(prim_addr, sec_addr, "function: prime signature matching");
+                }
+            }
+        }
+    }
+}
+
+pub fn match_by_flow_graph_md_index(context: &mut MatchingContext, inverted: bool) {
+    let step_name = if inverted {
+        "function: MD index matching (flowgraph MD index, bottom up)"
+    } else {
+        "function: MD index matching (flowgraph MD index, top down)"
+    };
+
+    let mut secondary_counts = HashMap::new();
+    let mut secondary_by_md = HashMap::new();
+    for fg in context.secondary_flow_graphs {
+        if context.fixed_points_by_secondary.contains_key(&fg.entry_point_address) {
+            continue;
+        }
+        let md = if inverted { fg.md_index_inverted } else { fg.md_index };
+        if md == 0.0 {
+            continue;
+        }
+        let md_bits = md.to_bits();
+        *secondary_counts.entry(md_bits).or_insert(0) += 1;
+        secondary_by_md.insert(md_bits, fg.entry_point_address);
+    }
+
+    let mut primary_counts = HashMap::new();
+    let mut primary_by_md = HashMap::new();
+    for fg in context.primary_flow_graphs {
+        if context.fixed_points_by_primary.contains_key(&fg.entry_point_address) {
+            continue;
+        }
+        let md = if inverted { fg.md_index_inverted } else { fg.md_index };
+        if md == 0.0 {
+            continue;
+        }
+        let md_bits = md.to_bits();
+        *primary_counts.entry(md_bits).or_insert(0) += 1;
+        primary_by_md.insert(md_bits, fg.entry_point_address);
+    }
+
+    for (md_bits, &prim_addr) in &primary_by_md {
+        if primary_counts[md_bits] == 1 {
+            if let Some(&sec_counts) = secondary_counts.get(md_bits) {
+                if sec_counts == 1 {
+                    let sec_addr = secondary_by_md[md_bits];
+                    context.add_fixed_point(prim_addr, sec_addr, step_name);
+                }
+            }
+        }
+    }
+}
+
+pub fn match_by_call_graph_md_index(context: &mut MatchingContext, inverted: bool) {
+    let step_name = if inverted {
+        "function: MD index matching (callGraph MD index, bottom up)"
+    } else {
+        "function: MD index matching (callGraph MD index, top down)"
+    };
+
+    let mut secondary_counts = HashMap::new();
+    let mut secondary_by_md = HashMap::new();
+    for fg in context.secondary_flow_graphs {
+        if context.fixed_points_by_secondary.contains_key(&fg.entry_point_address) {
+            continue;
+        }
+        if let Some(node_idx) = fg.call_graph_vertex {
+            let md = context.secondary_call_graph.get_vertex_md_index(node_idx, inverted);
+            if md == 0.0 {
+                continue;
+            }
+            let md_bits = md.to_bits();
+            *secondary_counts.entry(md_bits).or_insert(0) += 1;
+            secondary_by_md.insert(md_bits, fg.entry_point_address);
+        }
+    }
+
+    let mut primary_counts = HashMap::new();
+    let mut primary_by_md = HashMap::new();
+    for fg in context.primary_flow_graphs {
+        if context.fixed_points_by_primary.contains_key(&fg.entry_point_address) {
+            continue;
+        }
+        if let Some(node_idx) = fg.call_graph_vertex {
+            let md = context.primary_call_graph.get_vertex_md_index(node_idx, inverted);
+            if md == 0.0 {
+                continue;
+            }
+            let md_bits = md.to_bits();
+            *primary_counts.entry(md_bits).or_insert(0) += 1;
+            primary_by_md.insert(md_bits, fg.entry_point_address);
+        }
+    }
+
+    for (md_bits, &prim_addr) in &primary_by_md {
+        if primary_counts[md_bits] == 1 {
+            if let Some(&sec_counts) = secondary_counts.get(md_bits) {
+                if sec_counts == 1 {
+                    let sec_addr = secondary_by_md[md_bits];
+                    context.add_fixed_point(prim_addr, sec_addr, step_name);
+                }
+            }
+        }
+    }
+}
+
 pub fn diff(context: &mut MatchingContext) {
     match_by_name(context);
     match_by_hash(context);
+    match_by_prime(context);
+    match_by_flow_graph_md_index(context, false); // Top down
+    match_by_flow_graph_md_index(context, true);  // Bottom up
+    match_by_call_graph_md_index(context, false); // Top down
+    match_by_call_graph_md_index(context, true);  // Bottom up
 }

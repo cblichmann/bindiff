@@ -245,6 +245,11 @@ impl DatabaseWriter {
         let func_steps = vec![
             "function: name hash matching",
             "function: hash matching",
+            "function: prime signature matching",
+            "function: MD index matching (flowgraph MD index, top down)",
+            "function: MD index matching (flowgraph MD index, bottom up)",
+            "function: MD index matching (callGraph MD index, top down)",
+            "function: MD index matching (callGraph MD index, bottom up)",
         ];
         for (i, step) in func_steps.iter().enumerate() {
             let id = (i + 1) as i16;

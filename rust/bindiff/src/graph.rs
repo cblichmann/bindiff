@@ -303,6 +303,20 @@ impl CallGraph {
             0.0
         }
     }
+
+    pub fn get_vertex_md_index(&self, vertex: NodeIndex<u32>, inverted: bool) -> f64 {
+        let mut md_indices = Vec::new();
+        for edge in self.graph.edges_directed(vertex, petgraph::Direction::Incoming) {
+            let md = if inverted { edge.weight().md_index_bottom_up } else { edge.weight().md_index_top_down };
+            md_indices.push(md);
+        }
+        for edge in self.graph.edges_directed(vertex, petgraph::Direction::Outgoing) {
+            let md = if inverted { edge.weight().md_index_bottom_up } else { edge.weight().md_index_top_down };
+            md_indices.push(md);
+        }
+        md_indices.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        md_indices.iter().sum()
+    }
 }
 
 // FlowGraph definitions
