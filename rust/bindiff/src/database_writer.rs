@@ -266,7 +266,8 @@ impl DatabaseWriter {
         }
 
         let bb_steps = vec![
-            "basicBlock: prime matching",
+            "basicBlock: prime matching (4 instructions minimum)",
+            "basicBlock: prime matching (0 instructions minimum)",
             "basicBlock: hash matching",
             "basicBlock: propagation (size==1)",
         ];
