@@ -277,6 +277,138 @@ pub fn match_by_call_graph_md_index(context: &mut MatchingContext, inverted: boo
     }
 }
 
+pub fn match_by_instruction_count(context: &mut MatchingContext) {
+    let mut secondary_counts = HashMap::new();
+    let mut secondary_by_count = HashMap::new();
+    for fg in context.secondary_flow_graphs {
+        if context.fixed_points_by_secondary.contains_key(&fg.entry_point_address) {
+            continue;
+        }
+        let count = fg.instructions.len() as u64;
+        if count == 0 {
+            continue;
+        }
+        *secondary_counts.entry(count).or_insert(0) += 1;
+        secondary_by_count.insert(count, fg.entry_point_address);
+    }
+
+    let mut primary_counts = HashMap::new();
+    let mut primary_by_count = HashMap::new();
+    for fg in context.primary_flow_graphs {
+        if context.fixed_points_by_primary.contains_key(&fg.entry_point_address) {
+            continue;
+        }
+        let count = fg.instructions.len() as u64;
+        if count == 0 {
+            continue;
+        }
+        *primary_counts.entry(count).or_insert(0) += 1;
+        primary_by_count.insert(count, fg.entry_point_address);
+    }
+
+    for (count, &prim_addr) in &primary_by_count {
+        if primary_counts[count] == 1 {
+            if let Some(&sec_counts) = secondary_counts.get(count) {
+                if sec_counts == 1 {
+                    let sec_addr = secondary_by_count[count];
+                    context.add_fixed_point(prim_addr, sec_addr, "function: instruction count");
+                }
+            }
+        }
+    }
+}
+
+pub fn match_by_loop_count(context: &mut MatchingContext) {
+    let mut secondary_counts = HashMap::new();
+    let mut secondary_by_loops = HashMap::new();
+    for fg in context.secondary_flow_graphs {
+        if context.fixed_points_by_secondary.contains_key(&fg.entry_point_address) {
+            continue;
+        }
+        let loops = fg.num_loops as u64;
+        if loops == 0 {
+            continue;
+        }
+        *secondary_counts.entry(loops).or_insert(0) += 1;
+        secondary_by_loops.insert(loops, fg.entry_point_address);
+    }
+
+    let mut primary_counts = HashMap::new();
+    let mut primary_by_loops = HashMap::new();
+    for fg in context.primary_flow_graphs {
+        if context.fixed_points_by_primary.contains_key(&fg.entry_point_address) {
+            continue;
+        }
+        let loops = fg.num_loops as u64;
+        if loops == 0 {
+            continue;
+        }
+        *primary_counts.entry(loops).or_insert(0) += 1;
+        primary_by_loops.insert(loops, fg.entry_point_address);
+    }
+
+    for (loops, &prim_addr) in &primary_by_loops {
+        if primary_counts[loops] == 1 {
+            if let Some(&sec_counts) = secondary_counts.get(loops) {
+                if sec_counts == 1 {
+                    let sec_addr = secondary_by_loops[loops];
+                    context.add_fixed_point(prim_addr, sec_addr, "function: loop count matching");
+                }
+            }
+        }
+    }
+}
+
+pub fn match_by_address_sequence(context: &mut MatchingContext) {
+    let mut unmatched_primary: Vec<_> = context.primary_flow_graphs.iter()
+        .filter(|fg| !context.fixed_points_by_primary.contains_key(&fg.entry_point_address))
+        .collect();
+    let mut unmatched_secondary: Vec<_> = context.secondary_flow_graphs.iter()
+        .filter(|fg| !context.fixed_points_by_secondary.contains_key(&fg.entry_point_address))
+        .collect();
+
+    if unmatched_primary.is_empty() || unmatched_primary.len() != unmatched_secondary.len() {
+        return;
+    }
+
+    let sort_key = |fg: &FlowGraph, fgs: &[FlowGraph]| {
+        let seq = fgs.iter().position(|x| x.entry_point_address == fg.entry_point_address).unwrap();
+        (fg.instructions.len(), seq)
+    };
+
+    let fgs1 = context.primary_flow_graphs;
+    unmatched_primary.sort_by(|a, b| {
+        let key_a = sort_key(a, fgs1);
+        let key_b = sort_key(b, fgs1);
+        let cmp = key_b.0.cmp(&key_a.0);
+        if cmp == std::cmp::Ordering::Equal {
+            key_b.1.cmp(&key_a.1)
+        } else {
+            cmp
+        }
+    });
+
+    let fgs2 = context.secondary_flow_graphs;
+    unmatched_secondary.sort_by(|a, b| {
+        let key_a = sort_key(a, fgs2);
+        let key_b = sort_key(b, fgs2);
+        let cmp = key_b.0.cmp(&key_a.0);
+        if cmp == std::cmp::Ordering::Equal {
+            key_b.1.cmp(&key_a.1)
+        } else {
+            cmp
+        }
+    });
+
+    for i in 0..unmatched_primary.len() {
+        context.add_fixed_point(
+            unmatched_primary[i].entry_point_address,
+            unmatched_secondary[i].entry_point_address,
+            "function: address sequence",
+        );
+    }
+}
+
 pub fn diff(context: &mut MatchingContext) {
     match_by_name(context);
     match_by_hash(context);
@@ -285,4 +417,7 @@ pub fn diff(context: &mut MatchingContext) {
     match_by_flow_graph_md_index(context, true);  // Bottom up
     match_by_call_graph_md_index(context, false); // Top down
     match_by_call_graph_md_index(context, true);  // Bottom up
+    match_by_instruction_count(context);
+    match_by_loop_count(context);
+    match_by_address_sequence(context);
 }
