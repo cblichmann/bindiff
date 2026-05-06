@@ -498,7 +498,15 @@ pub fn match_by_call_sequence(context: &mut MatchingContext, accuracy: u8) {
 }
 
 pub fn diff(context: &mut MatchingContext) {
-    match_by_name(context);
+    let skip_name = std::env::var("BINDIFF_DEV_SKIP_NAME_MATCHING")
+        .map(|v| v == "1" || v.to_lowercase() == "true" || v.is_empty())
+        .unwrap_or(false);
+
+    if !skip_name {
+        match_by_name(context);
+    } else {
+        println!("BINDIFF_DEV_SKIP_NAME_MATCHING is enabled: skipping function name matching!");
+    }
     match_by_hash(context);
     match_by_prime(context);
     match_by_flow_graph_md_index(context, false); // Top down
