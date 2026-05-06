@@ -11,6 +11,7 @@ pub mod prime_signature;
 pub mod reader;
 pub mod fixed_points;
 pub mod differ;
+pub mod database_writer;
 
 // Include generated proto code
 pub mod bindiff {
@@ -152,8 +153,33 @@ fn main() -> Result<()> {
 
         println!("Diff completed!");
         println!("Matched functions: {}", context.fixed_points.len());
-        for fp in &context.fixed_points {
-            println!("  {:X} <-> {:X} ({})", fp.primary_address, fp.secondary_address, fp.matching_step);
+        
+        let get_stem = |path_str: &str| {
+            std::path::Path::new(path_str)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_string()
+        };
+        let prim_name = get_stem(&primary_call_graph.filename);
+        let sec_name = get_stem(&secondary_call_graph.filename);
+
+        if args.output_format.iter().any(|f| f == "bin" || f == "binary") {
+            let out_dir = args.output_dir.clone().unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+            let out_filename = format!("{}_vs_{}.BinDiff", prim_name, sec_name);
+            let out_path = out_dir.join(out_filename);
+            println!("Writing SQLite database to: {}", out_path.display());
+            
+            let mut db_writer = database_writer::DatabaseWriter::create(&out_path)
+                .context("Failed to create DatabaseWriter")?;
+            db_writer.write(
+                &primary_call_graph,
+                &secondary_call_graph,
+                &primary_flow_graphs,
+                &secondary_flow_graphs,
+                &context.fixed_points,
+            ).context("Failed to write database matches")?;
+            println!("SQLite database written successfully!");
         }
     } else {
         println!("Arguments parsed successfully: {:?}", args);
