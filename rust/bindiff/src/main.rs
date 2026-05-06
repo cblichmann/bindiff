@@ -12,6 +12,8 @@ pub mod reader;
 pub mod fixed_points;
 pub mod differ;
 pub mod database_writer;
+pub mod statistics;
+pub mod log_writer;
 
 // Include generated proto code
 pub mod bindiff {
@@ -180,6 +182,23 @@ fn main() -> Result<()> {
                 &context.fixed_points,
             ).context("Failed to write database matches")?;
             println!("SQLite database written successfully!");
+        }
+
+        if args.output_format.iter().any(|f| f == "log") {
+            let out_dir = args.output_dir.clone().unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+            let out_filename = format!("{}_vs_{}.results", prim_name, sec_name);
+            let out_path = out_dir.join(out_filename);
+            println!("Writing text log to: {}", out_path.display());
+            
+            let log_writer = log_writer::ResultsLogWriter::create(&out_path);
+            log_writer.write(
+                &primary_call_graph,
+                &secondary_call_graph,
+                &primary_flow_graphs,
+                &secondary_flow_graphs,
+                &context.fixed_points,
+            ).context("Failed to write text log")?;
+            println!("Text log written successfully!");
         }
     } else {
         println!("Arguments parsed successfully: {:?}", args);
