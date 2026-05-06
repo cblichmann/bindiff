@@ -36,16 +36,31 @@ impl<'a> MatchingContext<'a> {
             return;
         }
 
-        let fp = FixedPoint {
+        let prim_fg = self.primary_flow_graphs.iter().find(|fg| fg.entry_point_address == primary_addr).unwrap();
+        let sec_fg = self.secondary_flow_graphs.iter().find(|fg| fg.entry_point_address == secondary_addr).unwrap();
+
+        let mut fp = FixedPoint {
             primary_address: primary_addr,
             secondary_address: secondary_addr,
             matching_step: step_name.to_string(),
             basic_block_fixed_points: Vec::new(),
-            confidence: 1.0, // Default to 1.0 for simple steps
+            confidence: 1.0,
             similarity: 1.0,
             flags: 0,
             comments_ported: false,
         };
+
+        crate::basic_block_differ::find_fixed_points_basic_block(&mut fp, prim_fg, sec_fg);
+
+        let bbs1 = prim_fg.graph.node_count();
+        let bbs2 = sec_fg.graph.node_count();
+        let matched_bbs = fp.basic_block_fixed_points.len();
+        if bbs1 > 0 || bbs2 > 0 {
+            fp.similarity = matched_bbs as f64 / std::cmp::max(bbs1, bbs2) as f64;
+        } else {
+            fp.similarity = 1.0;
+        }
+        fp.confidence = fp.similarity;
 
         self.fixed_points.push(fp);
         let idx = self.fixed_points.len() - 1;

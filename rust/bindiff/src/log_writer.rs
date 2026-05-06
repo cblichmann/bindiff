@@ -91,34 +91,31 @@ impl ResultsLogWriter {
         )?;
 
         for fp in fixed_points {
+            let prim_fg = flow_graphs1.iter().find(|fg| fg.entry_point_address == fp.primary_address).unwrap();
+            let sec_fg = flow_graphs2.iter().find(|fg| fg.entry_point_address == fp.secondary_address).unwrap();
+
             let mut name1 = format!("sub_{:X}", fp.primary_address);
             let mut name2 = format!("sub_{:X}", fp.secondary_address);
-            let mut md1 = 0.0;
-            let mut md2 = 0.0;
-            let mut lib1 = 0;
-            let mut lib2 = 0;
+            let md1 = prim_fg.md_index;
+            let md2 = sec_fg.md_index;
+            let lib1 = if crate::statistics::is_library(prim_fg, call_graph1) { 1 } else { 0 };
+            let lib2 = if crate::statistics::is_library(sec_fg, call_graph2) { 1 } else { 0 };
 
             if let Some(node_idx) = call_graph1.get_vertex(fp.primary_address) {
                 let name = &call_graph1.graph[node_idx].name;
                 if !name.is_empty() {
                     name1 = name.clone();
                 }
-                let fg = flow_graphs1.iter().find(|fg| fg.entry_point_address == fp.primary_address).unwrap();
-                lib1 = if crate::statistics::is_library(fg, call_graph1) { 1 } else { 0 };
-                md1 = fg.md_index;
             }
             if let Some(node_idx) = call_graph2.get_vertex(fp.secondary_address) {
                 let name = &call_graph2.graph[node_idx].name;
                 if !name.is_empty() {
                     name2 = name.clone();
                 }
-                let fg = flow_graphs2.iter().find(|fg| fg.entry_point_address == fp.secondary_address).unwrap();
-                lib2 = if crate::statistics::is_library(fg, call_graph2) { 1 } else { 0 };
-                md2 = fg.md_index;
             }
 
-            let bbs1 = flow_graphs1.iter().find(|fg| fg.entry_point_address == fp.primary_address).unwrap().graph.node_count();
-            let bbs2 = flow_graphs2.iter().find(|fg| fg.entry_point_address == fp.secondary_address).unwrap().graph.node_count();
+            let bbs1 = prim_fg.graph.node_count();
+            let bbs2 = sec_fg.graph.node_count();
 
             writeln!(
                 file,
@@ -142,6 +139,26 @@ impl ResultsLogWriter {
                 bbs1,
                 bbs2
             )?;
+            for bb in &fp.basic_block_fixed_points {
+                let addr1 = prim_fg.get_address(bb.primary_vertex);
+                let addr2 = sec_fg.get_address(bb.secondary_vertex);
+                let insts1 = prim_fg.get_instructions(bb.primary_vertex).len();
+                let insts2 = sec_fg.get_instructions(bb.secondary_vertex).len();
+                
+                writeln!(
+                    file,
+                    "\t{:X}\t{:X}\t{}",
+                    addr1,
+                    addr2,
+                    bb.matching_step
+                )?;
+                writeln!(
+                    file,
+                    "\t\t0\t{}\t{}",
+                    insts1,
+                    insts2
+                )?;
+            }
         }
 
         let matched_primary: HashSet<_> = fixed_points.iter().map(|fp| fp.primary_address).collect();

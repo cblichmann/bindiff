@@ -14,6 +14,7 @@ pub mod differ;
 pub mod database_writer;
 pub mod statistics;
 pub mod log_writer;
+pub mod basic_block_differ;
 
 // Include generated proto code
 pub mod bindiff {

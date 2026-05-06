@@ -453,6 +453,14 @@ impl FlowGraph {
         }
     }
 
+    pub fn get_children(&self, vertex: NodeIndex<u32>) -> Vec<NodeIndex<u32>> {
+        self.graph.neighbors_directed(vertex, petgraph::Direction::Outgoing).collect()
+    }
+
+    pub fn get_parents(&self, vertex: NodeIndex<u32>) -> Vec<NodeIndex<u32>> {
+        self.graph.neighbors_directed(vertex, petgraph::Direction::Incoming).collect()
+    }
+
     pub fn get_address(&self, vertex: NodeIndex<u32>) -> Address {
         self.get_instructions(vertex)[0].address
     }

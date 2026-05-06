@@ -1,0 +1,143 @@
+use crate::graph::FlowGraph;
+use crate::fixed_points::{FixedPoint, BasicBlockFixedPoint};
+use petgraph::graph::NodeIndex;
+use std::collections::{HashSet, HashMap};
+
+pub fn find_fixed_points_basic_block(
+    fixed_point: &mut FixedPoint,
+    primary: &FlowGraph,
+    secondary: &FlowGraph,
+) {
+    let mut unmatched_primary: HashSet<_> = primary.graph.node_indices().collect();
+    let mut unmatched_secondary: HashSet<_> = secondary.graph.node_indices().collect();
+
+    match_basic_blocks_by_hash(
+        fixed_point,
+        primary,
+        secondary,
+        &mut unmatched_primary,
+        &mut unmatched_secondary,
+    );
+
+    let mut more_discovered = true;
+    while more_discovered {
+        more_discovered = propagate_basic_blocks(
+            fixed_point,
+            primary,
+            secondary,
+            &mut unmatched_primary,
+            &mut unmatched_secondary,
+        );
+    }
+}
+
+fn match_basic_blocks_by_hash(
+    fixed_point: &mut FixedPoint,
+    primary: &FlowGraph,
+    secondary: &FlowGraph,
+    unmatched_primary: &mut HashSet<NodeIndex<u32>>,
+    unmatched_secondary: &mut HashSet<NodeIndex<u32>>,
+) {
+    let mut secondary_counts = HashMap::new();
+    let mut secondary_by_hash = HashMap::new();
+    for &v in unmatched_secondary.iter() {
+        let hash = secondary.graph[v].basic_block_hash;
+        if hash == 0 {
+            continue;
+        }
+        *secondary_counts.entry(hash).or_insert(0) += 1;
+        secondary_by_hash.insert(hash, v);
+    }
+
+    let mut primary_counts = HashMap::new();
+    let mut primary_by_hash = HashMap::new();
+    for &v in unmatched_primary.iter() {
+        let hash = primary.graph[v].basic_block_hash;
+        if hash == 0 {
+            continue;
+        }
+        *primary_counts.entry(hash).or_insert(0) += 1;
+        primary_by_hash.insert(hash, v);
+    }
+
+    for (hash, &prim_v) in &primary_by_hash {
+        if primary_counts[hash] == 1 {
+            if let Some(&sec_counts) = secondary_counts.get(hash) {
+                if sec_counts == 1 {
+                    let sec_v = secondary_by_hash[hash];
+                    
+                    fixed_point.basic_block_fixed_points.push(BasicBlockFixedPoint {
+                        primary_vertex: prim_v,
+                        secondary_vertex: sec_v,
+                        matching_step: "basicBlock: hash matching".to_string(),
+                        instruction_matches: Vec::new(),
+                    });
+                    unmatched_primary.remove(&prim_v);
+                    unmatched_secondary.remove(&sec_v);
+                }
+            }
+        }
+    }
+}
+
+fn propagate_basic_blocks(
+    fixed_point: &mut FixedPoint,
+    primary: &FlowGraph,
+    secondary: &FlowGraph,
+    unmatched_primary: &mut HashSet<NodeIndex<u32>>,
+    unmatched_secondary: &mut HashSet<NodeIndex<u32>>,
+) -> bool {
+    let mut discovered = false;
+    
+    let current_matches: Vec<_> = fixed_point.basic_block_fixed_points.iter()
+        .map(|fp| (fp.primary_vertex, fp.secondary_vertex))
+        .collect();
+
+    for (prim_v, sec_v) in current_matches {
+        // Propagation down (children)
+        let c1: Vec<_> = primary.get_children(prim_v).into_iter()
+            .filter(|v| unmatched_primary.contains(v))
+            .collect();
+        let c2: Vec<_> = secondary.get_children(sec_v).into_iter()
+            .filter(|v| unmatched_secondary.contains(v))
+            .collect();
+
+        if c1.len() == 1 && c2.len() == 1 {
+            let child1 = c1[0];
+            let child2 = c2[0];
+            fixed_point.basic_block_fixed_points.push(BasicBlockFixedPoint {
+                primary_vertex: child1,
+                secondary_vertex: child2,
+                matching_step: "basicBlock: propagation (size==1)".to_string(),
+                instruction_matches: Vec::new(),
+            });
+            unmatched_primary.remove(&child1);
+            unmatched_secondary.remove(&child2);
+            discovered = true;
+        }
+
+        // Propagation up (parents)
+        let p1: Vec<_> = primary.get_parents(prim_v).into_iter()
+            .filter(|v| unmatched_primary.contains(v))
+            .collect();
+        let p2: Vec<_> = secondary.get_parents(sec_v).into_iter()
+            .filter(|v| unmatched_secondary.contains(v))
+            .collect();
+
+        if p1.len() == 1 && p2.len() == 1 {
+            let parent1 = p1[0];
+            let parent2 = p2[0];
+            fixed_point.basic_block_fixed_points.push(BasicBlockFixedPoint {
+                primary_vertex: parent1,
+                secondary_vertex: parent2,
+                matching_step: "basicBlock: propagation (size==1)".to_string(),
+                instruction_matches: Vec::new(),
+            });
+            unmatched_primary.remove(&parent1);
+            unmatched_secondary.remove(&parent2);
+            discovered = true;
+        }
+    }
+
+    discovered
+}

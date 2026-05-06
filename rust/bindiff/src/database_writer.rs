@@ -142,8 +142,8 @@ impl DatabaseWriter {
         let tx = self.conn.transaction().context("Failed to begin transaction")?;
 
         Self::write_metadata(&tx, call_graph1, call_graph2, flow_graphs1, flow_graphs2, fixed_points)?;
-        let (func_algos, _bb_algos) = Self::write_algorithms(&tx)?;
-        Self::write_matches(&tx, fixed_points, &func_algos, call_graph1, call_graph2)?;
+        let (func_algos, bb_algos) = Self::write_algorithms(&tx)?;
+        Self::write_matches(&tx, fixed_points, &func_algos, &bb_algos, call_graph1, call_graph2, flow_graphs1, flow_graphs2)?;
 
         tx.commit().context("Failed to commit transaction")?;
         Ok(())
@@ -267,6 +267,8 @@ impl DatabaseWriter {
 
         let bb_steps = vec![
             "basicBlock: prime matching",
+            "basicBlock: hash matching",
+            "basicBlock: propagation (size==1)",
         ];
         for (i, step) in bb_steps.iter().enumerate() {
             let id = (i + 1) as i16;
@@ -282,13 +284,20 @@ impl DatabaseWriter {
         tx: &Connection,
         fixed_points: &FixedPoints,
         func_algos: &HashMap<String, i16>,
+        bb_algos: &HashMap<String, i16>,
         call_graph1: &CallGraph,
         call_graph2: &CallGraph,
+        flow_graphs1: &[FlowGraph],
+        flow_graphs2: &[FlowGraph],
     ) -> Result<()> {
         let mut function_id = 1;
+        let mut basic_block_id = 1;
 
         for fp in fixed_points {
             let algo_id = func_algos.get(&fp.matching_step).cloned().unwrap_or(0);
+            
+            let prim_fg = flow_graphs1.iter().find(|fg| fg.entry_point_address == fp.primary_address).unwrap();
+            let sec_fg = flow_graphs2.iter().find(|fg| fg.entry_point_address == fp.secondary_address).unwrap();
 
             let mut name1 = format!("sub_{:X}", fp.primary_address);
             let mut name2 = format!("sub_{:X}", fp.secondary_address);
@@ -320,11 +329,32 @@ impl DatabaseWriter {
                     algo_id,
                     0, // evaluate
                     fp.comments_ported as i32,
-                    0, // basicblocks count matched
+                    fp.basic_block_fixed_points.len() as i32,
                     0, // edges count matched
                     0, // instructions count matched
                 ],
             ).context("Failed to insert function match")?;
+
+            for bb in &fp.basic_block_fixed_points {
+                let bb_algo_id = bb_algos.get(&bb.matching_step).cloned().unwrap_or(0);
+                
+                let addr1 = prim_fg.get_address(bb.primary_vertex);
+                let addr2 = sec_fg.get_address(bb.secondary_vertex);
+
+                tx.execute(
+                    "INSERT INTO basicblock VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![
+                        basic_block_id,
+                        function_id,
+                        addr1 as i64,
+                        addr2 as i64,
+                        bb_algo_id,
+                        0,
+                    ],
+                ).context("Failed to insert basic block match")?;
+
+                basic_block_id += 1;
+            }
 
             function_id += 1;
         }
