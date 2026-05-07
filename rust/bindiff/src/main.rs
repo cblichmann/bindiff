@@ -43,18 +43,19 @@ struct Args {
     #[arg(long, help = "secondary input file (optional)")]
     secondary: Option<String>,
 
-    #[arg(long, help = "output path, defaults to current directory")]
+    #[arg(long, alias = "output_dir", help = "output path, defaults to current directory")]
     output_dir: Option<PathBuf>,
 
     #[arg(
         long,
+        alias = "output_format",
         value_delimiter = ',',
         default_value = "bin",
         help = "comma-separated list of output formats: log, bin"
     )]
     output_format: Vec<String>,
 
-    #[arg(long, help = "dump MD indices (will not diff anything)")]
+    #[arg(long, alias = "md_index", help = "dump MD indices (will not diff anything)")]
     md_index: bool,
 
     #[arg(long, help = "batch export .idb files from input directory to BinExport format")]
@@ -66,7 +67,7 @@ struct Args {
     #[arg(long, help = "specify config file name")]
     config: Option<PathBuf>,
 
-    #[arg(long, help = "print parsed configuration to stdout and exit")]
+    #[arg(long, alias = "print_config", help = "print parsed configuration to stdout and exit")]
     print_config: bool,
 
     // Positional arguments
