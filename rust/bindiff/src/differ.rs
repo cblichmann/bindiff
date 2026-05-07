@@ -524,8 +524,10 @@ pub fn diff(context: &mut MatchingContext) {
     }
     match_by_hash(context);
     match_by_prime(context);
+    match_by_edges_flowgraph_md_index(context);
     match_by_flow_graph_md_index(context, false); // Top down
     match_by_flow_graph_md_index(context, true);  // Bottom up
+    match_by_edges_callgraph_md_index(context);
     match_by_call_graph_md_index(context, false); // Top down
     match_by_call_graph_md_index(context, true);  // Bottom up
     match_by_relaxed_md_index(context);
@@ -578,6 +580,140 @@ pub fn match_by_relaxed_md_index(context: &mut MatchingContext) {
                 if sec_counts == 1 {
                     let sec_addr = secondary_by_md[md_bits];
                     context.add_fixed_point(prim_addr, sec_addr, "function: relaxed MD index matching");
+                }
+            }
+        }
+    }
+}
+
+pub fn match_by_edges_flowgraph_md_index(context: &mut MatchingContext) {
+    let mut secondary_counts = HashMap::new();
+    let mut secondary_by_sig = HashMap::new();
+    
+    for edge in context.secondary_call_graph.graph.edge_indices() {
+        let (sec_source_v, sec_target_v) = context.secondary_call_graph.graph.edge_endpoints(edge).unwrap();
+        let sec_source_addr = context.secondary_call_graph.graph[sec_source_v].address;
+        let sec_target_addr = context.secondary_call_graph.graph[sec_target_v].address;
+
+        if context.fixed_points_by_secondary.contains_key(&sec_source_addr)
+            || context.fixed_points_by_secondary.contains_key(&sec_target_addr)
+        {
+            continue;
+        }
+
+        let sec_source_fg = context.secondary_flow_graphs.iter().find(|fg| fg.entry_point_address == sec_source_addr).unwrap();
+        let sec_target_fg = context.secondary_flow_graphs.iter().find(|fg| fg.entry_point_address == sec_target_addr).unwrap();
+        
+        let md_src = sec_source_fg.md_index;
+        let md_tgt = sec_target_fg.md_index;
+        if md_src == 0.0 || md_tgt == 0.0 {
+            continue;
+        }
+
+        let sig = (md_src.to_bits(), md_tgt.to_bits());
+        *secondary_counts.entry(sig).or_insert(0) += 1;
+        secondary_by_sig.insert(sig, (sec_source_addr, sec_target_addr));
+    }
+
+    let mut primary_counts = HashMap::new();
+    let mut primary_by_sig = HashMap::new();
+    
+    for edge in context.primary_call_graph.graph.edge_indices() {
+        let (prim_source_v, prim_target_v) = context.primary_call_graph.graph.edge_endpoints(edge).unwrap();
+        let prim_source_addr = context.primary_call_graph.graph[prim_source_v].address;
+        let prim_target_addr = context.primary_call_graph.graph[prim_target_v].address;
+
+        if context.fixed_points_by_primary.contains_key(&prim_source_addr)
+            || context.fixed_points_by_primary.contains_key(&prim_target_addr)
+        {
+            continue;
+        }
+
+        let prim_source_fg = context.primary_flow_graphs.iter().find(|fg| fg.entry_point_address == prim_source_addr).unwrap();
+        let prim_target_fg = context.primary_flow_graphs.iter().find(|fg| fg.entry_point_address == prim_target_addr).unwrap();
+        
+        let md_src = prim_source_fg.md_index;
+        let md_tgt = prim_target_fg.md_index;
+        if md_src == 0.0 || md_tgt == 0.0 {
+            continue;
+        }
+
+        let sig = (md_src.to_bits(), md_tgt.to_bits());
+        *primary_counts.entry(sig).or_insert(0) += 1;
+        primary_by_sig.insert(sig, (prim_source_addr, prim_target_addr));
+    }
+
+    for (sig, &(prim_src, prim_tgt)) in &primary_by_sig {
+        if primary_counts[sig] == 1 {
+            if let Some(&sec_counts) = secondary_counts.get(sig) {
+                if sec_counts == 1 {
+                    let (sec_src, sec_tgt) = secondary_by_sig[sig];
+                    
+                    context.add_fixed_point(prim_src, sec_src, "function: edges flowgraph MD index");
+                    context.add_fixed_point(prim_tgt, sec_tgt, "function: edges flowgraph MD index");
+                }
+            }
+        }
+    }
+}
+
+pub fn match_by_edges_callgraph_md_index(context: &mut MatchingContext) {
+    let mut secondary_counts = HashMap::new();
+    let mut secondary_by_sig = HashMap::new();
+    
+    for edge in context.secondary_call_graph.graph.edge_indices() {
+        let (sec_source_v, sec_target_v) = context.secondary_call_graph.graph.edge_endpoints(edge).unwrap();
+        let sec_source_addr = context.secondary_call_graph.graph[sec_source_v].address;
+        let sec_target_addr = context.secondary_call_graph.graph[sec_target_v].address;
+
+        if context.fixed_points_by_secondary.contains_key(&sec_source_addr)
+            || context.fixed_points_by_secondary.contains_key(&sec_target_addr)
+        {
+            continue;
+        }
+
+        let md = context.secondary_call_graph.graph[edge].md_index_top_down;
+        if md == 0.0 {
+            continue;
+        }
+
+        let sig = md.to_bits();
+        *secondary_counts.entry(sig).or_insert(0) += 1;
+        secondary_by_sig.insert(sig, (sec_source_addr, sec_target_addr));
+    }
+
+    let mut primary_counts = HashMap::new();
+    let mut primary_by_sig = HashMap::new();
+    
+    for edge in context.primary_call_graph.graph.edge_indices() {
+        let (prim_source_v, prim_target_v) = context.primary_call_graph.graph.edge_endpoints(edge).unwrap();
+        let prim_source_addr = context.primary_call_graph.graph[prim_source_v].address;
+        let prim_target_addr = context.primary_call_graph.graph[prim_target_v].address;
+
+        if context.fixed_points_by_primary.contains_key(&prim_source_addr)
+            || context.fixed_points_by_primary.contains_key(&prim_target_addr)
+        {
+            continue;
+        }
+
+        let md = context.primary_call_graph.graph[edge].md_index_top_down;
+        if md == 0.0 {
+            continue;
+        }
+
+        let sig = md.to_bits();
+        *primary_counts.entry(sig).or_insert(0) += 1;
+        primary_by_sig.insert(sig, (prim_source_addr, prim_target_addr));
+    }
+
+    for (sig, &(prim_src, prim_tgt)) in &primary_by_sig {
+        if primary_counts[sig] == 1 {
+            if let Some(&sec_counts) = secondary_counts.get(sig) {
+                if sec_counts == 1 {
+                    let (sec_src, sec_tgt) = secondary_by_sig[sig];
+                    
+                    context.add_fixed_point(prim_src, sec_src, "function: edges callgraph MD index");
+                    context.add_fixed_point(prim_tgt, sec_tgt, "function: edges callgraph MD index");
                 }
             }
         }
