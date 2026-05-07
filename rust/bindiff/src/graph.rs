@@ -332,6 +332,72 @@ impl CallGraph {
         md_indices.sort_by(|a, b| a.partial_cmp(b).unwrap());
         md_indices.iter().sum()
     }
+
+    pub fn calculate_proximity_md_index(&self, edge: EdgeIndex<u32>) -> f64 {
+        use std::collections::{HashSet, HashMap};
+        
+        let (source, target) = self.graph.edge_endpoints(edge).unwrap();
+        let mut neighbors = HashSet::new();
+        neighbors.insert(source);
+        neighbors.insert(target);
+
+        for n in self.graph.neighbors_directed(source, petgraph::Direction::Incoming) {
+            neighbors.insert(n);
+        }
+        for n in self.graph.neighbors_directed(target, petgraph::Direction::Incoming) {
+            neighbors.insert(n);
+        }
+        for n in self.graph.neighbors_directed(source, petgraph::Direction::Outgoing) {
+            neighbors.insert(n);
+        }
+        for n in self.graph.neighbors_directed(target, petgraph::Direction::Outgoing) {
+            neighbors.insert(n);
+        }
+
+        let mut degrees = HashMap::new();
+        let mut internal_edges = HashSet::new();
+
+        for &neighbor in &neighbors {
+            let mut in_degree = 0;
+            for in_edge in self.graph.edges_directed(neighbor, petgraph::Direction::Incoming) {
+                if neighbors.contains(&in_edge.source()) {
+                    in_degree += 1;
+                    internal_edges.insert(in_edge.id());
+                }
+            }
+
+            let mut out_degree = 0;
+            for out_edge in self.graph.edges_directed(neighbor, petgraph::Direction::Outgoing) {
+                if neighbors.contains(&out_edge.target()) {
+                    out_degree += 1;
+                    internal_edges.insert(out_edge.id());
+                }
+            }
+
+            degrees.insert(neighbor, (in_degree as f64, out_degree as f64));
+        }
+
+        let mut md_indices = Vec::new();
+        for edge_idx in internal_edges {
+            let (src, tgt) = self.graph.edge_endpoints(edge_idx).unwrap();
+            let &(src_in, src_out) = degrees.get(&src).unwrap();
+            let &(tgt_in, tgt_out) = degrees.get(&tgt).unwrap();
+
+            let md = 2.0f64.sqrt() * src_in
+                + 3.0f64.sqrt() * src_out
+                + 5.0f64.sqrt() * tgt_in
+                + 7.0f64.sqrt() * tgt_out;
+
+            if md != 0.0 {
+                md_indices.push(1.0 / md);
+            } else {
+                md_indices.push(0.0);
+            }
+        }
+
+        md_indices.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        md_indices.iter().sum()
+    }
 }
 
 // FlowGraph definitions
