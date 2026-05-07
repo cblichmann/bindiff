@@ -7,6 +7,7 @@ pub fn find_fixed_points_basic_block(
     fixed_point: &mut FixedPoint,
     primary: &FlowGraph,
     secondary: &FlowGraph,
+    context: &crate::differ::MatchingContext,
 ) {
     let mut unmatched_primary: HashSet<_> = primary.graph.node_indices().collect();
     let mut unmatched_secondary: HashSet<_> = secondary.graph.node_indices().collect();
@@ -44,6 +45,15 @@ pub fn find_fixed_points_basic_block(
         &mut unmatched_primary,
         &mut unmatched_secondary,
         4,
+    );
+
+    match_basic_blocks_by_call_refs(
+        fixed_point,
+        primary,
+        secondary,
+        &mut unmatched_primary,
+        &mut unmatched_secondary,
+        context,
     );
 
     match_basic_blocks_by_md_index_relaxed(
@@ -278,6 +288,90 @@ fn match_basic_blocks_by_md_index_relaxed(
             if let Some(&sec_counts) = secondary_counts.get(md_bits) {
                 if sec_counts == 1 {
                     let sec_v = secondary_by_md[md_bits];
+                    
+                    fixed_point.basic_block_fixed_points.push(BasicBlockFixedPoint {
+                        primary_vertex: prim_v,
+                        secondary_vertex: sec_v,
+                        matching_step: step_name.to_string(),
+                        instruction_matches: Vec::new(),
+                    });
+                    unmatched_primary.remove(&prim_v);
+                    unmatched_secondary.remove(&sec_v);
+                }
+            }
+        }
+    }
+}
+
+fn match_basic_blocks_by_call_refs(
+    fixed_point: &mut FixedPoint,
+    primary: &FlowGraph,
+    secondary: &FlowGraph,
+    unmatched_primary: &mut HashSet<NodeIndex<u32>>,
+    unmatched_secondary: &mut HashSet<NodeIndex<u32>>,
+    context: &crate::differ::MatchingContext,
+) {
+    let step_name = "basicBlock: call reference matching";
+
+    let mut secondary_counts = HashMap::new();
+    let mut secondary_by_ref = HashMap::new();
+    for &v in unmatched_secondary.iter() {
+        let calls = secondary.get_call_targets(v);
+        if calls.is_empty() {
+            continue;
+        }
+        
+        let mut ref_feature = 0u64;
+        let mut valid = true;
+        for (i, &addr) in calls.iter().enumerate() {
+            if let Some(&fp_idx) = context.fixed_points_by_secondary.get(&addr) {
+                let fp = &context.fixed_points[fp_idx];
+                ref_feature = ref_feature.wrapping_add(
+                    (i + 1) as u64 * (fp.primary_address.wrapping_add(fp.secondary_address))
+                );
+            } else {
+                valid = false;
+                break;
+            }
+        }
+        if valid && ref_feature > 0 {
+            *secondary_counts.entry(ref_feature).or_insert(0) += 1;
+            secondary_by_ref.insert(ref_feature, v);
+        }
+    }
+
+    let mut primary_counts = HashMap::new();
+    let mut primary_by_ref = HashMap::new();
+    for &v in unmatched_primary.iter() {
+        let calls = primary.get_call_targets(v);
+        if calls.is_empty() {
+            continue;
+        }
+        
+        let mut ref_feature = 0u64;
+        let mut valid = true;
+        for (i, &addr) in calls.iter().enumerate() {
+            if let Some(&fp_idx) = context.fixed_points_by_primary.get(&addr) {
+                let fp = &context.fixed_points[fp_idx];
+                ref_feature = ref_feature.wrapping_add(
+                    (i + 1) as u64 * (fp.primary_address.wrapping_add(fp.secondary_address))
+                );
+            } else {
+                valid = false;
+                break;
+            }
+        }
+        if valid && ref_feature > 0 {
+            *primary_counts.entry(ref_feature).or_insert(0) += 1;
+            primary_by_ref.insert(ref_feature, v);
+        }
+    }
+
+    for (ref_feature, &prim_v) in &primary_by_ref {
+        if primary_counts[ref_feature] == 1 {
+            if let Some(&sec_counts) = secondary_counts.get(ref_feature) {
+                if sec_counts == 1 {
+                    let sec_v = secondary_by_ref[ref_feature];
                     
                     fixed_point.basic_block_fixed_points.push(BasicBlockFixedPoint {
                         primary_vertex: prim_v,

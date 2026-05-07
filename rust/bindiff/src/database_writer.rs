@@ -273,6 +273,7 @@ impl DatabaseWriter {
             "basicBlock: MD index matching (top down)",
             "basicBlock: MD index matching (bottom up)",
             "basicBlock: relaxed MD index matching",
+            "basicBlock: call reference matching",
             "basicBlock: propagation (size==1)",
         ];
         for (i, step) in bb_steps.iter().enumerate() {

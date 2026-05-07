@@ -50,7 +50,7 @@ impl<'a> MatchingContext<'a> {
             comments_ported: false,
         };
 
-        crate::basic_block_differ::find_fixed_points_basic_block(&mut fp, prim_fg, sec_fg);
+        crate::basic_block_differ::find_fixed_points_basic_block(&mut fp, prim_fg, sec_fg, self);
 
         let bbs1 = prim_fg.graph.node_count();
         let bbs2 = sec_fg.graph.node_count();
