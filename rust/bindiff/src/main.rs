@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use std::fs;
 use std::path::PathBuf;
-use graph::CallGraph;
+use graph::{CallGraph, FlowGraph};
 
 pub mod types;
 pub mod instruction;
@@ -132,6 +132,34 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    if args.ls {
+        if let Some(primary) = &args.primary {
+            list_files(primary).context("Failed to list files")?;
+            return Ok(());
+        } else {
+            anyhow::bail!("Primary directory (--primary) must be specified when listing files (--ls)");
+        }
+    }
+
+    if args.md_index {
+        if let Some(primary) = &args.primary {
+            let path = std::path::Path::new(primary);
+            if path.is_dir() {
+                batch_dump_md_indices(primary).context("Failed to batch dump MD indices")?;
+            } else {
+                let mut call_graph = CallGraph::default();
+                let mut flow_graphs = Vec::new();
+                println!("Reading primary: {}", primary);
+                reader::read(path, &mut call_graph, &mut flow_graphs)
+                    .context("Failed to read primary")?;
+                dump_md_indices(&call_graph, &flow_graphs);
+            }
+            return Ok(());
+        } else {
+            anyhow::bail!("Primary input (--primary) must be specified when dumping MD indices (--md-index)");
+        }
+    }
+
     if let (Some(primary), Some(secondary)) = (&args.primary, &args.secondary) {
         let mut primary_call_graph = CallGraph::default();
         let mut primary_flow_graphs = Vec::new();
@@ -204,6 +232,113 @@ fn main() -> Result<()> {
     } else {
         println!("Arguments parsed successfully: {:?}", args);
         println!("Config loaded successfully (num_threads: {})", config.num_threads);
+    }
+
+    Ok(())
+}
+
+fn list_files(path_str: &str) -> Result<()> {
+    let path = std::path::Path::new(path_str);
+    if !path.is_dir() {
+        anyhow::bail!("Input path must be a directory for listing: {}", path.display());
+    }
+
+    let entries = std::fs::read_dir(path)
+        .with_context(|| format!("Failed to read directory: {}", path.display()))?;
+
+    for entry in entries {
+        let entry = entry.context("Failed to read directory entry")?;
+        let file_path = entry.path();
+        
+        if file_path.is_dir() {
+            continue;
+        }
+
+        if file_path.extension().and_then(|s| s.to_str()).map(|s| s.to_lowercase()) != Some("binexport".to_string()) {
+            continue;
+        }
+
+        let mut file = std::fs::File::open(&file_path)
+            .with_context(|| format!("Failed to open file: {}", file_path.display()))?;
+        
+        let mut bytes = Vec::new();
+        use std::io::Read;
+        file.read_to_end(&mut bytes).context("Failed to read file bytes")?;
+        
+        use prost::Message;
+        if let Ok(proto) = crate::binexport::BinExport2::decode(&bytes[..]) {
+            if let Some(meta) = proto.meta_information {
+                eprintln!(
+                    "{}: {} ({})",
+                    file_path.display(),
+                    meta.executable_id.unwrap_or_default(),
+                    meta.executable_name.unwrap_or_default()
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn dump_md_indices(call_graph: &CallGraph, flow_graphs: &[FlowGraph]) {
+    let get_stem = |path_str: &str| {
+        std::path::Path::new(path_str)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string()
+    };
+
+    println!("\n{}", get_stem(&call_graph.filename));
+    println!("{}", call_graph.md_index);
+    
+    for fg in flow_graphs {
+        let lib_str = if fg.call_graph_vertex.map(|node| {
+            call_graph.graph[node].flags & crate::graph::VERTEX_LIBRARY != 0
+        }).unwrap_or(false) {
+            "Library"
+        } else {
+            "Non-library"
+        };
+
+        println!(
+            "{:X}\t{:.12}\t{}",
+            fg.entry_point_address,
+            fg.md_index,
+            lib_str
+        );
+    }
+}
+
+fn batch_dump_md_indices(path_str: &str) -> Result<()> {
+    let path = std::path::Path::new(path_str);
+    if !path.is_dir() {
+        anyhow::bail!("Input path must be a directory for batch MD index dump: {}", path.display());
+    }
+
+    let entries = std::fs::read_dir(path)
+        .with_context(|| format!("Failed to read directory: {}", path.display()))?;
+
+    for entry in entries {
+        let entry = entry.context("Failed to read directory entry")?;
+        let file_path = entry.path();
+        
+        if file_path.is_dir() {
+            continue;
+        }
+
+        let ext = file_path.extension().and_then(|s| s.to_str()).map(|s| s.to_lowercase());
+        if ext != Some("binexport".to_string()) && ext != Some("call_graph".to_string()) {
+            continue;
+        }
+
+        let mut call_graph = CallGraph::default();
+        let mut flow_graphs = Vec::new();
+        reader::read(&file_path, &mut call_graph, &mut flow_graphs)
+            .with_context(|| format!("Failed to read file: {}", file_path.display()))?;
+        
+        dump_md_indices(&call_graph, &flow_graphs);
     }
 
     Ok(())
