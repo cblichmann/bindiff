@@ -250,6 +250,7 @@ impl DatabaseWriter {
             "function: MD index matching (flowgraph MD index, bottom up)",
             "function: MD index matching (callGraph MD index, top down)",
             "function: MD index matching (callGraph MD index, bottom up)",
+            "function: relaxed MD index matching",
             "function: instruction count",
             "function: loop count matching",
             "function: call sequence matching(exact)",

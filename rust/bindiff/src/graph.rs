@@ -317,6 +317,21 @@ impl CallGraph {
         md_indices.sort_by(|a, b| a.partial_cmp(b).unwrap());
         md_indices.iter().sum()
     }
+
+    pub fn get_vertex_md_index_relaxed(&self, vertex: NodeIndex<u32>) -> f64 {
+        let weights = [2.0, 3.0, 5.0, 7.0, 0.0, 0.0];
+        let mut md_indices = Vec::new();
+        for edge in self.graph.edges_directed(vertex, petgraph::Direction::Incoming) {
+            let md = self.calculate_edge_md_index(edge.id(), false, &weights);
+            md_indices.push(md);
+        }
+        for edge in self.graph.edges_directed(vertex, petgraph::Direction::Outgoing) {
+            let md = self.calculate_edge_md_index(edge.id(), false, &weights);
+            md_indices.push(md);
+        }
+        md_indices.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        md_indices.iter().sum()
+    }
 }
 
 // FlowGraph definitions
