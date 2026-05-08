@@ -277,8 +277,13 @@ impl DatabaseWriter {
             "basicBlock: MD index matching (bottom up)",
             "basicBlock: relaxed MD index matching",
             "basicBlock: call reference matching",
+            "basicBlock: string references matching",
+            "basicBlock: loop entry matching",
             "basicBlock: self loop matching",
+            "basicBlock: entry point matching",
+            "basicBlock: exit point matching",
             "basicBlock: instruction count matching",
+            "basicBlock: jump sequence matching",
             "basicBlock: propagation (size==1)",
         ];
         for (i, step) in bb_steps.iter().enumerate() {
