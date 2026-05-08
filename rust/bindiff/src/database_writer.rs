@@ -273,6 +273,10 @@ impl DatabaseWriter {
         let bb_steps = vec![
             "basicBlock: prime matching (4 instructions minimum)",
             "basicBlock: prime matching (0 instructions minimum)",
+            "basicBlock: edges prime product",
+            "basicBlock: edges MD index (top down)",
+            "basicBlock: edges MD index (bottom up)",
+            "basicBlock: edges Lengauer Tarjan dominated",
             "basicBlock: hash matching",
             "basicBlock: MD index matching (top down)",
             "basicBlock: MD index matching (bottom up)",

@@ -48,6 +48,40 @@ pub fn find_fixed_points_basic_block(
         4,
     );
 
+    match_basic_blocks_by_edges_prime(
+        fixed_point,
+        primary,
+        secondary,
+        &mut unmatched_primary,
+        &mut unmatched_secondary,
+    );
+
+    match_basic_blocks_by_edges_md_index(
+        fixed_point,
+        primary,
+        secondary,
+        &mut unmatched_primary,
+        &mut unmatched_secondary,
+        false,
+    );
+
+    match_basic_blocks_by_edges_md_index(
+        fixed_point,
+        primary,
+        secondary,
+        &mut unmatched_primary,
+        &mut unmatched_secondary,
+        true,
+    );
+
+    match_basic_blocks_by_edges_loop(
+        fixed_point,
+        primary,
+        secondary,
+        &mut unmatched_primary,
+        &mut unmatched_secondary,
+    );
+
     match_basic_blocks_by_call_refs(
         fixed_point,
         primary,
@@ -550,8 +584,6 @@ fn match_basic_blocks_by_instruction_count(
     }
 }
 
-}
-
 fn match_basic_blocks_by_string_refs(
     fixed_point: &mut FixedPoint,
     primary: &FlowGraph,
@@ -779,6 +811,244 @@ fn match_basic_blocks_by_jump_sequence(
                     });
                     unmatched_primary.remove(&prim_v);
                     unmatched_secondary.remove(&sec_v);
+                }
+            }
+        }
+    }
+}
+
+}
+
+pub fn match_basic_blocks_by_edges_md_index(
+    fixed_point: &mut FixedPoint,
+    primary: &FlowGraph,
+    secondary: &FlowGraph,
+    unmatched_primary: &mut HashSet<NodeIndex<u32>>,
+    unmatched_secondary: &mut HashSet<NodeIndex<u32>>,
+    inverted: bool,
+) {
+    let step_name = if inverted {
+        "basicBlock: edges MD index (bottom up)"
+    } else {
+        "basicBlock: edges MD index (top down)"
+    };
+
+    let mut secondary_counts = HashMap::new();
+    let mut secondary_by_sig = HashMap::new();
+    for edge in secondary.graph.edge_indices() {
+        if secondary.graph[edge].flags & crate::graph::EDGE_CIRCULAR != 0 {
+            continue;
+        }
+        let (sec_source_v, sec_target_v) = secondary.graph.edge_endpoints(edge).unwrap();
+        if unmatched_secondary.contains(&sec_source_v) || unmatched_secondary.contains(&sec_target_v) {
+            let md = if inverted {
+                secondary.graph[edge].md_index_bottom_up
+            } else {
+                secondary.graph[edge].md_index_top_down
+            };
+            if md == 0.0 {
+                continue;
+            }
+            let sig = md.to_bits();
+            *secondary_counts.entry(sig).or_insert(0) += 1;
+            secondary_by_sig.insert(sig, (sec_source_v, sec_target_v));
+        }
+    }
+
+    let mut primary_counts = HashMap::new();
+    let mut primary_by_sig = HashMap::new();
+    for edge in primary.graph.edge_indices() {
+        if primary.graph[edge].flags & crate::graph::EDGE_CIRCULAR != 0 {
+            continue;
+        }
+        let (prim_source_v, prim_target_v) = primary.graph.edge_endpoints(edge).unwrap();
+        if unmatched_primary.contains(&prim_source_v) || unmatched_primary.contains(&prim_target_v) {
+            let md = if inverted {
+                primary.graph[edge].md_index_bottom_up
+            } else {
+                primary.graph[edge].md_index_top_down
+            };
+            if md == 0.0 {
+                continue;
+            }
+            let sig = md.to_bits();
+            *primary_counts.entry(sig).or_insert(0) += 1;
+            primary_by_sig.insert(sig, (prim_source_v, prim_target_v));
+        }
+    }
+
+    for (sig, &(prim_src, prim_tgt)) in &primary_by_sig {
+        if primary_counts[sig] == 1 {
+            if let Some(&sec_counts) = secondary_counts.get(sig) {
+                if sec_counts == 1 {
+                    let (sec_src, sec_tgt) = secondary_by_sig[sig];
+                    
+                    if unmatched_primary.contains(&prim_src) && unmatched_secondary.contains(&sec_src) {
+                        fixed_point.basic_block_fixed_points.push(BasicBlockFixedPoint {
+                            primary_vertex: prim_src,
+                            secondary_vertex: sec_src,
+                            matching_step: step_name.to_string(),
+                            instruction_matches: Vec::new(),
+                        });
+                        unmatched_primary.remove(&prim_src);
+                        unmatched_secondary.remove(&sec_src);
+                    }
+                    if unmatched_primary.contains(&prim_tgt) && unmatched_secondary.contains(&sec_tgt) {
+                        fixed_point.basic_block_fixed_points.push(BasicBlockFixedPoint {
+                            primary_vertex: prim_tgt,
+                            secondary_vertex: sec_tgt,
+                            matching_step: step_name.to_string(),
+                            instruction_matches: Vec::new(),
+                        });
+                        unmatched_primary.remove(&prim_tgt);
+                        unmatched_secondary.remove(&sec_tgt);
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub fn match_basic_blocks_by_edges_prime(
+    fixed_point: &mut FixedPoint,
+    primary: &FlowGraph,
+    secondary: &FlowGraph,
+    unmatched_primary: &mut HashSet<NodeIndex<u32>>,
+    unmatched_secondary: &mut HashSet<NodeIndex<u32>>,
+) {
+    let step_name = "basicBlock: edges prime product";
+
+    let mut secondary_counts = HashMap::new();
+    let mut secondary_by_sig = HashMap::new();
+    for edge in secondary.graph.edge_indices() {
+        if secondary.graph[edge].flags & crate::graph::EDGE_CIRCULAR != 0 {
+            continue;
+        }
+        let (sec_source_v, sec_target_v) = secondary.graph.edge_endpoints(edge).unwrap();
+        if unmatched_secondary.contains(&sec_source_v) || unmatched_secondary.contains(&sec_target_v) {
+            let sig = secondary.graph[sec_source_v].prime
+                .wrapping_add(secondary.graph[sec_target_v].prime)
+                .wrapping_add(1);
+            *secondary_counts.entry(sig).or_insert(0) += 1;
+            secondary_by_sig.insert(sig, (sec_source_v, sec_target_v));
+        }
+    }
+
+    let mut primary_counts = HashMap::new();
+    let mut primary_by_sig = HashMap::new();
+    for edge in primary.graph.edge_indices() {
+        if primary.graph[edge].flags & crate::graph::EDGE_CIRCULAR != 0 {
+            continue;
+        }
+        let (prim_source_v, prim_target_v) = primary.graph.edge_endpoints(edge).unwrap();
+        if unmatched_primary.contains(&prim_source_v) || unmatched_primary.contains(&prim_target_v) {
+            let sig = primary.graph[prim_source_v].prime
+                .wrapping_add(primary.graph[prim_target_v].prime)
+                .wrapping_add(1);
+            *primary_counts.entry(sig).or_insert(0) += 1;
+            primary_by_sig.insert(sig, (prim_source_v, prim_target_v));
+        }
+    }
+
+    for (sig, &(prim_src, prim_tgt)) in &primary_by_sig {
+        if primary_counts[sig] == 1 {
+            if let Some(&sec_counts) = secondary_counts.get(sig) {
+                if sec_counts == 1 {
+                    let (sec_src, sec_tgt) = secondary_by_sig[sig];
+                    
+                    if unmatched_primary.contains(&prim_src) && unmatched_secondary.contains(&sec_src) {
+                        fixed_point.basic_block_fixed_points.push(BasicBlockFixedPoint {
+                            primary_vertex: prim_src,
+                            secondary_vertex: sec_src,
+                            matching_step: step_name.to_string(),
+                            instruction_matches: Vec::new(),
+                        });
+                        unmatched_primary.remove(&prim_src);
+                        unmatched_secondary.remove(&sec_src);
+                    }
+                    if unmatched_primary.contains(&prim_tgt) && unmatched_secondary.contains(&sec_tgt) {
+                        fixed_point.basic_block_fixed_points.push(BasicBlockFixedPoint {
+                            primary_vertex: prim_tgt,
+                            secondary_vertex: sec_tgt,
+                            matching_step: step_name.to_string(),
+                            instruction_matches: Vec::new(),
+                        });
+                        unmatched_primary.remove(&prim_tgt);
+                        unmatched_secondary.remove(&sec_tgt);
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub fn match_basic_blocks_by_edges_loop(
+    fixed_point: &mut FixedPoint,
+    primary: &FlowGraph,
+    secondary: &FlowGraph,
+    unmatched_primary: &mut HashSet<NodeIndex<u32>>,
+    unmatched_secondary: &mut HashSet<NodeIndex<u32>>,
+) {
+    let step_name = "basicBlock: edges Lengauer Tarjan dominated";
+
+    let mut secondary_counts = HashMap::new();
+    let mut secondary_by_sig = HashMap::new();
+    for edge in secondary.graph.edge_indices() {
+        if secondary.graph[edge].flags & crate::graph::EDGE_CIRCULAR != 0 {
+            continue;
+        }
+        let (sec_source_v, sec_target_v) = secondary.graph.edge_endpoints(edge).unwrap();
+        if unmatched_secondary.contains(&sec_source_v) || unmatched_secondary.contains(&sec_target_v) {
+            if secondary.graph[edge].flags & crate::graph::EDGE_DOMINATED != 0 {
+                let sig = 1u64;
+                *secondary_counts.entry(sig).or_insert(0) += 1;
+                secondary_by_sig.insert(sig, (sec_source_v, sec_target_v));
+            }
+        }
+    }
+
+    let mut primary_counts = HashMap::new();
+    let mut primary_by_sig = HashMap::new();
+    for edge in primary.graph.edge_indices() {
+        if primary.graph[edge].flags & crate::graph::EDGE_CIRCULAR != 0 {
+            continue;
+        }
+        let (prim_source_v, prim_target_v) = primary.graph.edge_endpoints(edge).unwrap();
+        if unmatched_primary.contains(&prim_source_v) || unmatched_primary.contains(&prim_target_v) {
+            if primary.graph[edge].flags & crate::graph::EDGE_DOMINATED != 0 {
+                let sig = 1u64;
+                *primary_counts.entry(sig).or_insert(0) += 1;
+                primary_by_sig.insert(sig, (prim_source_v, prim_target_v));
+            }
+        }
+    }
+
+    for (sig, &(prim_src, prim_tgt)) in &primary_by_sig {
+        if primary_counts[sig] == 1 {
+            if let Some(&sec_counts) = secondary_counts.get(sig) {
+                if sec_counts == 1 {
+                    let (sec_src, sec_tgt) = secondary_by_sig[sig];
+                    
+                    if unmatched_primary.contains(&prim_src) && unmatched_secondary.contains(&sec_src) {
+                        fixed_point.basic_block_fixed_points.push(BasicBlockFixedPoint {
+                            primary_vertex: prim_src,
+                            secondary_vertex: sec_src,
+                            matching_step: step_name.to_string(),
+                            instruction_matches: Vec::new(),
+                        });
+                        unmatched_primary.remove(&prim_src);
+                        unmatched_secondary.remove(&sec_src);
+                    }
+                    if unmatched_primary.contains(&prim_tgt) && unmatched_secondary.contains(&sec_tgt) {
+                        fixed_point.basic_block_fixed_points.push(BasicBlockFixedPoint {
+                            primary_vertex: prim_tgt,
+                            secondary_vertex: sec_tgt,
+                            matching_step: step_name.to_string(),
+                            instruction_matches: Vec::new(),
+                        });
+                        unmatched_primary.remove(&prim_tgt);
+                        unmatched_secondary.remove(&sec_tgt);
+                    }
                 }
             }
         }
