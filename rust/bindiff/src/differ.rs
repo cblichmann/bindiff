@@ -538,6 +538,7 @@ pub fn diff(context: &mut MatchingContext) {
     match_by_call_sequence(context, 1); // Topology call sequence
     match_by_call_sequence(context, 2); // Sequence call sequence
     match_by_address_sequence(context);
+    match_by_string_references(context);
 }
 
 pub fn match_by_relaxed_md_index(context: &mut MatchingContext) {
@@ -778,6 +779,47 @@ pub fn match_by_edges_proximity_md_index(context: &mut MatchingContext) {
                     
                     context.add_fixed_point(prim_src, sec_src, "function: edges proximity MD index");
                     context.add_fixed_point(prim_tgt, sec_tgt, "function: edges proximity MD index");
+                }
+            }
+        }
+    }
+}
+
+pub fn match_by_string_references(context: &mut MatchingContext) {
+    let mut secondary_counts = HashMap::new();
+    let mut secondary_by_md = HashMap::new();
+    for fg in &context.secondary_flow_graphs {
+        if context.fixed_points_by_secondary.contains_key(&fg.entry_point_address) {
+            continue;
+        }
+        let sig = fg.string_references;
+        if sig <= 1 {
+            continue;
+        }
+        *secondary_counts.entry(sig).or_insert(0) += 1;
+        secondary_by_md.insert(sig, fg.entry_point_address);
+    }
+
+    let mut primary_counts = HashMap::new();
+    let mut primary_by_md = HashMap::new();
+    for fg in &context.primary_flow_graphs {
+        if context.fixed_points_by_primary.contains_key(&fg.entry_point_address) {
+            continue;
+        }
+        let sig = fg.string_references;
+        if sig <= 1 {
+            continue;
+        }
+        *primary_counts.entry(sig).or_insert(0) += 1;
+        primary_by_md.insert(sig, fg.entry_point_address);
+    }
+
+    for (sig, &prim_addr) in &primary_by_md {
+        if primary_counts[sig] == 1 {
+            if let Some(&sec_counts) = secondary_counts.get(sig) {
+                if sec_counts == 1 {
+                    let sec_addr = secondary_by_md[sig];
+                    context.add_fixed_point(prim_addr, sec_addr, "function: string references");
                 }
             }
         }

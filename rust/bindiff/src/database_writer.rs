@@ -260,6 +260,7 @@ impl DatabaseWriter {
             "function: call sequence matching(topology)",
             "function: call sequence matching(sequence)",
             "function: address sequence",
+            "function: string references",
             "function: manual",
         ];
         for (i, step) in func_steps.iter().enumerate() {
