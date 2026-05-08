@@ -1,6 +1,7 @@
 use crate::graph::FlowGraph;
 use crate::fixed_points::{FixedPoint, BasicBlockFixedPoint};
 use petgraph::graph::NodeIndex;
+use petgraph::visit::EdgeRef;
 use std::collections::{HashSet, HashMap};
 
 pub fn find_fixed_points_basic_block(
@@ -57,6 +58,22 @@ pub fn find_fixed_points_basic_block(
     );
 
     match_basic_blocks_by_md_index_relaxed(
+        fixed_point,
+        primary,
+        secondary,
+        &mut unmatched_primary,
+        &mut unmatched_secondary,
+    );
+
+    match_basic_blocks_by_self_loops(
+        fixed_point,
+        primary,
+        secondary,
+        &mut unmatched_primary,
+        &mut unmatched_secondary,
+    );
+
+    match_basic_blocks_by_instruction_count(
         fixed_point,
         primary,
         secondary,
@@ -372,6 +389,110 @@ fn match_basic_blocks_by_call_refs(
             if let Some(&sec_counts) = secondary_counts.get(ref_feature) {
                 if sec_counts == 1 {
                     let sec_v = secondary_by_ref[ref_feature];
+                    
+                    fixed_point.basic_block_fixed_points.push(BasicBlockFixedPoint {
+                        primary_vertex: prim_v,
+                        secondary_vertex: sec_v,
+                        matching_step: step_name.to_string(),
+                        instruction_matches: Vec::new(),
+                    });
+                    unmatched_primary.remove(&prim_v);
+                    unmatched_secondary.remove(&sec_v);
+                }
+            }
+        }
+    }
+}
+
+fn match_basic_blocks_by_self_loops(
+    fixed_point: &mut FixedPoint,
+    primary: &FlowGraph,
+    secondary: &FlowGraph,
+    unmatched_primary: &mut HashSet<NodeIndex<u32>>,
+    unmatched_secondary: &mut HashSet<NodeIndex<u32>>,
+) {
+    let step_name = "basicBlock: self loop matching";
+
+    let mut secondary_counts = HashMap::new();
+    let mut secondary_by_loops = HashMap::new();
+    for &v in unmatched_secondary.iter() {
+        let self_loops = secondary.graph.edges_directed(v, petgraph::Direction::Outgoing)
+            .filter(|edge| edge.target() == v)
+            .count();
+        if self_loops == 0 {
+            continue;
+        }
+        *secondary_counts.entry(self_loops).or_insert(0) += 1;
+        secondary_by_loops.insert(self_loops, v);
+    }
+
+    let mut primary_counts = HashMap::new();
+    let mut primary_by_loops = HashMap::new();
+    for &v in unmatched_primary.iter() {
+        let self_loops = primary.graph.edges_directed(v, petgraph::Direction::Outgoing)
+            .filter(|edge| edge.target() == v)
+            .count();
+        if self_loops == 0 {
+            continue;
+        }
+        *primary_counts.entry(self_loops).or_insert(0) += 1;
+        primary_by_loops.insert(self_loops, v);
+    }
+
+    for (self_loops, &prim_v) in &primary_by_loops {
+        if primary_counts[self_loops] == 1 {
+            if let Some(&sec_counts) = secondary_counts.get(self_loops) {
+                if sec_counts == 1 {
+                    let sec_v = secondary_by_loops[self_loops];
+                    
+                    fixed_point.basic_block_fixed_points.push(BasicBlockFixedPoint {
+                        primary_vertex: prim_v,
+                        secondary_vertex: sec_v,
+                        matching_step: step_name.to_string(),
+                        instruction_matches: Vec::new(),
+                    });
+                    unmatched_primary.remove(&prim_v);
+                    unmatched_secondary.remove(&sec_v);
+                }
+            }
+        }
+    }
+}
+
+fn match_basic_blocks_by_instruction_count(
+    fixed_point: &mut FixedPoint,
+    primary: &FlowGraph,
+    secondary: &FlowGraph,
+    unmatched_primary: &mut HashSet<NodeIndex<u32>>,
+    unmatched_secondary: &mut HashSet<NodeIndex<u32>>,
+) {
+    let step_name = "basicBlock: instruction count matching";
+
+    let mut secondary_counts = HashMap::new();
+    let mut secondary_by_sig = HashMap::new();
+    for &v in unmatched_secondary.iter() {
+        let insts = secondary.get_instructions(v).len() as u64;
+        let md = secondary.get_vertex_md_index(v, false);
+        let sig = (md.to_bits(), insts);
+        *secondary_counts.entry(sig).or_insert(0) += 1;
+        secondary_by_sig.insert(sig, v);
+    }
+
+    let mut primary_counts = HashMap::new();
+    let mut primary_by_sig = HashMap::new();
+    for &v in unmatched_primary.iter() {
+        let insts = primary.get_instructions(v).len() as u64;
+        let md = primary.get_vertex_md_index(v, false);
+        let sig = (md.to_bits(), insts);
+        *primary_counts.entry(sig).or_insert(0) += 1;
+        primary_by_sig.insert(sig, v);
+    }
+
+    for (sig, &prim_v) in &primary_by_sig {
+        if primary_counts[sig] == 1 {
+            if let Some(&sec_counts) = secondary_counts.get(sig) {
+                if sec_counts == 1 {
+                    let sec_v = secondary_by_sig[sig];
                     
                     fixed_point.basic_block_fixed_points.push(BasicBlockFixedPoint {
                         primary_vertex: prim_v,
