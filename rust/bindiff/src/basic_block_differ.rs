@@ -817,8 +817,6 @@ fn match_basic_blocks_by_jump_sequence(
     }
 }
 
-}
-
 pub fn match_basic_blocks_by_edges_md_index(
     fixed_point: &mut FixedPoint,
     primary: &FlowGraph,
@@ -836,10 +834,10 @@ pub fn match_basic_blocks_by_edges_md_index(
     let mut secondary_counts = HashMap::new();
     let mut secondary_by_sig = HashMap::new();
     for edge in secondary.graph.edge_indices() {
-        if secondary.graph[edge].flags & crate::graph::EDGE_CIRCULAR != 0 {
+        let (sec_source_v, sec_target_v) = secondary.graph.edge_endpoints(edge).unwrap();
+        if sec_source_v == sec_target_v {
             continue;
         }
-        let (sec_source_v, sec_target_v) = secondary.graph.edge_endpoints(edge).unwrap();
         if unmatched_secondary.contains(&sec_source_v) || unmatched_secondary.contains(&sec_target_v) {
             let md = if inverted {
                 secondary.graph[edge].md_index_bottom_up
@@ -858,10 +856,10 @@ pub fn match_basic_blocks_by_edges_md_index(
     let mut primary_counts = HashMap::new();
     let mut primary_by_sig = HashMap::new();
     for edge in primary.graph.edge_indices() {
-        if primary.graph[edge].flags & crate::graph::EDGE_CIRCULAR != 0 {
+        let (prim_source_v, prim_target_v) = primary.graph.edge_endpoints(edge).unwrap();
+        if prim_source_v == prim_target_v {
             continue;
         }
-        let (prim_source_v, prim_target_v) = primary.graph.edge_endpoints(edge).unwrap();
         if unmatched_primary.contains(&prim_source_v) || unmatched_primary.contains(&prim_target_v) {
             let md = if inverted {
                 primary.graph[edge].md_index_bottom_up
@@ -921,10 +919,10 @@ pub fn match_basic_blocks_by_edges_prime(
     let mut secondary_counts = HashMap::new();
     let mut secondary_by_sig = HashMap::new();
     for edge in secondary.graph.edge_indices() {
-        if secondary.graph[edge].flags & crate::graph::EDGE_CIRCULAR != 0 {
+        let (sec_source_v, sec_target_v) = secondary.graph.edge_endpoints(edge).unwrap();
+        if sec_source_v == sec_target_v {
             continue;
         }
-        let (sec_source_v, sec_target_v) = secondary.graph.edge_endpoints(edge).unwrap();
         if unmatched_secondary.contains(&sec_source_v) || unmatched_secondary.contains(&sec_target_v) {
             let sig = secondary.graph[sec_source_v].prime
                 .wrapping_add(secondary.graph[sec_target_v].prime)
@@ -937,10 +935,10 @@ pub fn match_basic_blocks_by_edges_prime(
     let mut primary_counts = HashMap::new();
     let mut primary_by_sig = HashMap::new();
     for edge in primary.graph.edge_indices() {
-        if primary.graph[edge].flags & crate::graph::EDGE_CIRCULAR != 0 {
+        let (prim_source_v, prim_target_v) = primary.graph.edge_endpoints(edge).unwrap();
+        if prim_source_v == prim_target_v {
             continue;
         }
-        let (prim_source_v, prim_target_v) = primary.graph.edge_endpoints(edge).unwrap();
         if unmatched_primary.contains(&prim_source_v) || unmatched_primary.contains(&prim_target_v) {
             let sig = primary.graph[prim_source_v].prime
                 .wrapping_add(primary.graph[prim_target_v].prime)
@@ -994,10 +992,10 @@ pub fn match_basic_blocks_by_edges_loop(
     let mut secondary_counts = HashMap::new();
     let mut secondary_by_sig = HashMap::new();
     for edge in secondary.graph.edge_indices() {
-        if secondary.graph[edge].flags & crate::graph::EDGE_CIRCULAR != 0 {
+        let (sec_source_v, sec_target_v) = secondary.graph.edge_endpoints(edge).unwrap();
+        if sec_source_v == sec_target_v {
             continue;
         }
-        let (sec_source_v, sec_target_v) = secondary.graph.edge_endpoints(edge).unwrap();
         if unmatched_secondary.contains(&sec_source_v) || unmatched_secondary.contains(&sec_target_v) {
             if secondary.graph[edge].flags & crate::graph::EDGE_DOMINATED != 0 {
                 let sig = 1u64;
@@ -1010,10 +1008,10 @@ pub fn match_basic_blocks_by_edges_loop(
     let mut primary_counts = HashMap::new();
     let mut primary_by_sig = HashMap::new();
     for edge in primary.graph.edge_indices() {
-        if primary.graph[edge].flags & crate::graph::EDGE_CIRCULAR != 0 {
+        let (prim_source_v, prim_target_v) = primary.graph.edge_endpoints(edge).unwrap();
+        if prim_source_v == prim_target_v {
             continue;
         }
-        let (prim_source_v, prim_target_v) = primary.graph.edge_endpoints(edge).unwrap();
         if unmatched_primary.contains(&prim_source_v) || unmatched_primary.contains(&prim_target_v) {
             if primary.graph[edge].flags & crate::graph::EDGE_DOMINATED != 0 {
                 let sig = 1u64;

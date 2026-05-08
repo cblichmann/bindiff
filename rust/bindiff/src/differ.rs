@@ -788,7 +788,7 @@ pub fn match_by_edges_proximity_md_index(context: &mut MatchingContext) {
 pub fn match_by_string_references(context: &mut MatchingContext) {
     let mut secondary_counts = HashMap::new();
     let mut secondary_by_md = HashMap::new();
-    for fg in &context.secondary_flow_graphs {
+    for fg in context.secondary_flow_graphs {
         if context.fixed_points_by_secondary.contains_key(&fg.entry_point_address) {
             continue;
         }
@@ -802,7 +802,7 @@ pub fn match_by_string_references(context: &mut MatchingContext) {
 
     let mut primary_counts = HashMap::new();
     let mut primary_by_md = HashMap::new();
-    for fg in &context.primary_flow_graphs {
+    for fg in context.primary_flow_graphs {
         if context.fixed_points_by_primary.contains_key(&fg.entry_point_address) {
             continue;
         }
